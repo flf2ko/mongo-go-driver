@@ -569,6 +569,7 @@ func (s *Server) createConnection() (*connection, error) {
 		}),
 		// Override any command monitors specified in options with nil to avoid monitoring heartbeats.
 		WithMonitor(func(*event.CommandMonitor) *event.CommandMonitor { return nil }),
+		withErrorHandlingCallback(s.ProcessHandshakeError),
 	}
 	opts = append(s.cfg.connectionOpts, opts...)
 
