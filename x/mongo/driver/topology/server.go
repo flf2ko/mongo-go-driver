@@ -587,7 +587,7 @@ func (s *Server) setupHeartbeatConnection() error {
 		}),
 		// Override any command monitors specified in options with nil to avoid monitoring heartbeats.
 		WithMonitor(func(*event.CommandMonitor) *event.CommandMonitor { return nil }),
-		withErrorHandlingCallback(s.ProcessHandshakeError),
+		withErrorHandlingCallback(s.heartbeatCancel),
 	}
 	opts = append(s.cfg.connectionOpts, opts...)
 
@@ -604,6 +604,19 @@ func (s *Server) setupHeartbeatConnection() error {
 
 	s.conn.connect(s.heartbeatCtx)
 	return s.conn.wait()
+}
+
+func (s *Server) heartbeatCancel(err error, startingGenerationNumber uint64) {
+	// ignore nil or stale error
+	if err == nil || startingGenerationNumber < atomic.LoadUint64(&s.pool.generation) {
+		return
+	}
+
+	s.heartbeatLock.Lock()
+	if s.heartbeatCtx != nil {
+		s.heartbeatCtxCancel()
+	}
+	s.heartbeatLock.Unlock()
 }
 
 // cancelCheck cancels in-progress connection dials and reads. It does not set any fields on the server.
