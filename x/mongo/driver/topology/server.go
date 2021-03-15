@@ -569,7 +569,6 @@ func (s *Server) createConnection() (*connection, error) {
 		}),
 		// Override any command monitors specified in options with nil to avoid monitoring heartbeats.
 		WithMonitor(func(*event.CommandMonitor) *event.CommandMonitor { return nil }),
-		withErrorHandlingCallback(s.ProcessHandshakeError),
 	}
 	opts = append(s.cfg.connectionOpts, opts...)
 
@@ -577,7 +576,22 @@ func (s *Server) createConnection() (*connection, error) {
 }
 
 func (s *Server) setupHeartbeatConnection() error {
-	conn, err := s.createConnection()
+	opts := []ConnectionOption{
+		WithConnectTimeout(func(time.Duration) time.Duration { return s.cfg.heartbeatTimeout }),
+		WithReadTimeout(func(time.Duration) time.Duration { return s.cfg.heartbeatTimeout }),
+		WithWriteTimeout(func(time.Duration) time.Duration { return s.cfg.heartbeatTimeout }),
+		// We override whatever handshaker is currently attached to the options with a basic
+		// one because need to make sure we don't do auth.
+		WithHandshaker(func(h Handshaker) Handshaker {
+			return operation.NewIsMaster().AppName(s.cfg.appname).Compressors(s.cfg.compressionOpts)
+		}),
+		// Override any command monitors specified in options with nil to avoid monitoring heartbeats.
+		WithMonitor(func(*event.CommandMonitor) *event.CommandMonitor { return nil }),
+		withErrorHandlingCallback(s.ProcessHandshakeError),
+	}
+	opts = append(s.cfg.connectionOpts, opts...)
+
+	conn, err := newConnection(s.address, opts...)
 	if err != nil {
 		return err
 	}
